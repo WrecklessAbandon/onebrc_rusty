@@ -178,9 +178,9 @@ fn main() {
     let estimated_time_processing = app_total_time - file_read_total_time;
     println!(
        "=================================\n\
-       {:<22}{:>8} ms\n\
-       {:<22}{:>8} ms\n\
-       {:<22}{:>8} ms",
+       {:<27}{:>8} ms\n\
+       {:<27}{:>8} ms\n\
+       {:<27}{:>8} ms",
        "Time reading in file:",
        file_read_total_time.as_millis(),
        "Estimated Time processing:",
