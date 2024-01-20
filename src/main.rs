@@ -177,7 +177,7 @@ fn main() {
     // depending on their interference.
     let estimated_time_processing = app_total_time - file_read_total_time;
     println!(
-       "=================================\n\
+       "=========================================\n\
        {:<30}{:>11} \n\
        {:<27}{:>8} ms\n\
        {:<27}{:>8} ms\n\
