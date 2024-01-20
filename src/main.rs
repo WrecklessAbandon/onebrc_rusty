@@ -16,7 +16,7 @@ async fn async_tally(sender: Sender<HashMap<String, CityMetrics>>, data: Vec<u8>
     let mut start: usize = 0;
     for (newline_index, &byte) in data.iter().enumerate() {
         // line in read_lines() is soooooooo slooooooow. Resort to byte checking.
-        if byte == b'\n' || newline_index == data.len() {
+        if byte == b'\n' {
             if let Ok(line) = std::str::from_utf8(&data[start..newline_index]) {
                 let (city_name, temp_str) = line.split_once(';').expect(format!("Could not find delimeter in line '{}'", line).as_str());
                 let temperature = temp_str.parse::<f32>().expect(format!("Could not parse '{}' as f32", temp_str).as_str());
@@ -34,7 +34,7 @@ async fn async_tally(sender: Sender<HashMap<String, CityMetrics>>, data: Vec<u8>
                         low: temperature,
                         mean: 0.0,
                         temperature_sum: 0.0,
-                        num_temps: 0,
+                        num_temps: 1,
                     }
                 );
             }
@@ -61,13 +61,12 @@ fn main() {
     let mut file_bytes_read: usize = 0;
     println!("File Size: {}", file_size);
 
-    // Smaller chunks make it faster to process, square/scale it to hte num of processors.
+    // Smaller chunks make it faster to process, square/scale it to the num of processors.
     let num_chunks = num_processors * num_processors;
     let chunk_size = (file_size as usize / num_chunks) + 1;
     let extra_chunky = 1024 * 10; // Allocate an extra 10 KB for each vector
     println!("Splitting the vector into equal sized chunks of: {}", chunk_size);
 
-    let mut tasks = Vec::new();
     let mut chunk_remainder = Vec::new();
 
     // Start execution
@@ -75,7 +74,7 @@ fn main() {
     loop {
         // Chunking explained:
         // Read in the data as fast as possible, easiest method is as bytes.
-        // Once it has been read in, the the data is likely misaligned.
+        // Once it has been read in, the data is likely misaligned.
         // Re-align the data by truncating the current chunk
         // and pre-pending it to the next chunk. Avoid data copies
         // and REALLY avoid vec bumping.
@@ -97,8 +96,8 @@ fn main() {
                 if file_bytes_read < file_size {
                     if let Some(index) = chunk.iter().rev().position(|&x| x == b'\n') {
                         // The index is found, considering it's reversed, convert it to the original index
-                        let original_index = chunk.len() - index - 1;
-                        chunk_remainder = chunk[(original_index+1)..chunk.len()].to_vec();
+                        let original_index = chunk.len() - index;
+                        chunk_remainder = chunk[(original_index)..chunk.len()].to_vec();
                         chunk.truncate(original_index);
                     } else {
                         println!("Error: Expected to find newline character in chunk");
@@ -107,11 +106,10 @@ fn main() {
 
                 let sender_clone = sender.clone();
                 // ♥ async-std. Please, please, please keep this project going.
-                let task = task::spawn(async move {
+                let _ = task::spawn(async move {
                     async_tally(sender_clone, chunk).await
                 });
                 num_tasks += 1;
-                tasks.push(task);
             }
             Err(ref e) if e.kind() == io::ErrorKind::UnexpectedEof => {
                 // EOF, unexpected but tolerable
@@ -160,8 +158,10 @@ fn main() {
         }
     }
 
+    let mut total_num_temps = 0;
     all_cities.iter_mut().for_each(|(name, metric)|{
         metric.mean = metric.temperature_sum / metric.num_temps as f32;
+        total_num_temps += metric.num_temps;
         println!(
         "City Name: {}
         \tHigh Temp: {}
@@ -178,9 +178,12 @@ fn main() {
     let estimated_time_processing = app_total_time - file_read_total_time;
     println!(
        "=================================\n\
+       {:<30}{:>11} \n\
        {:<27}{:>8} ms\n\
        {:<27}{:>8} ms\n\
        {:<27}{:>8} ms",
+       "Total Temperatures Processed: ",
+       total_num_temps,
        "Time reading in file:",
        file_read_total_time.as_millis(),
        "Estimated Time processing:",
